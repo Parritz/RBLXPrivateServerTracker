@@ -1,10 +1,19 @@
-import {useState} from 'react'
-import reactLogo from '../assets/react.svg'
-import viteLogo from '/vite.svg'
-import '../css/App.css'
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 function App() {
-    console.log(import.meta.env.VITE_SERVER_URL);
+    const navigate = useNavigate();
+
+    // Check if the user is authenticated with a token and redirect accordingly
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (token) {
+            navigate('/dashboard');
+        } else {
+            navigate('/');
+        }
+    }, [useNavigate]);
+
     return (
         <>
             <div className="flex h-screen bg-gray-900 text-white items-center justify-center">

@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
+import Warning from "../components/warning.jsx";
+import placeholder_avatar from '../assets/placeholder_avatar.png';
 
 function Dashboard() {
     const serverURL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
@@ -7,12 +9,25 @@ function Dashboard() {
     const [userData, setUserData] = useState({});
     const [activeTab, setActiveTab] = useState('games');
     const [games, setGames] = useState([]);
-    const [cookies, setCookies] = useState([]);
+    const [accounts, setAccounts] = useState([]);
 
     // Check if the user is authenticated by verifying the token in cookies
     useEffect(() => {
+        const token = localStorage.getItem("token");
+        async function getAccountInfo() {
+            const response = await fetch(`${serverURL}/api/account`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'authentication': token
+                }
+            });
+
+            const data = await response.json();
+            console.log('Account Info:', data);
+        }
+
         async function verifyToken() {
-            const token = localStorage.getItem("token");
             if (!token) {
                 navigate('/');
                 return;
@@ -30,6 +45,7 @@ function Dashboard() {
 
                 // If the response is not 200, redirect to home since the token is invalid
                 if (response.status !== 200) {
+                    localStorage.removeItem("token");
                     navigate('/');
                     return;
                 }
@@ -44,7 +60,8 @@ function Dashboard() {
         }
 
         verifyToken();
-    }, [navigate, setUserData]);
+        getAccountInfo();
+    }, [navigate]);
 
     // Function to add a game to the tracked games list
     async function addGame() {
@@ -55,98 +72,135 @@ function Dashboard() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'authentication': localStorage.getItem('token')
             },
-            body: JSON.stringify({ id }),
-            credentials: 'include'
+            body: JSON.stringify({ id })
         });
 
-        // if (name) setGames([...games, { name }]);
+        if (name) setGames([...games, { name }]);
     }
 
-    function addCookie() {
-        const value = prompt('Enter Roblox cookie:');
-        // if (value) setCookies([...cookies, { value }]);
+    async function addAccount() {
+        const id = prompt('Enter Roblox account name:');
+        if (!id) return;
+
+        const response = await fetch(`${serverURL}/api/account`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'authentication': localStorage.getItem('token')
+            },
+            body: JSON.stringify({ name: id })
+        });
+
+        if (response.status === 200) {
+            setAccounts([...accounts, { id }]);
+        }
     }
 
     return (
         <div className="flex flex-col flex-grow bg-gray-900 text-white items-center justify-center">
-            <div className="w-full max-w-3xl h-[600px] bg-gray-800 rounded-lg shadow-2xl p-10 flex flex-col items-center justify-start">
-                <h1 className="text-3xl font-bold text-white mb-2 text-center">Roblox Private Server Tracker</h1>
-                <p className="text-white mb-6">Welcome, {userData.global_name || 'User'}!</p>
+            <Warning message="⚠️ One or more of your accounts have not added the tracker bot. These accounts will not be tracked." />
 
-                {/* Tabs */}
-                <div className="w-full flex mb-6 border-b border-gray-700">
-                    <button
-                        className={`flex-1 py-2 text-lg font-semibold transition-colors duration-200 ${activeTab === 'games' ? 'border-b-4 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-indigo-300'}`}
-                        onClick={() => setActiveTab('games')}
-                    >
-                        Games
-                    </button>
+            <div className="flex flex-row">
+                <div className="w-full max-w-3xl h-[600px] bg-gray-800 rounded-lg shadow-2xl p-10 flex flex-col items-center justify-start">
+                    <h1 className="text-3xl font-bold text-white mb-2 text-center">Roblox Private Server Tracker</h1>
+                    <p className="text-white mb-6">Welcome, {userData.global_name || 'User'}!</p>
 
-                    <button
-                        className={`flex-1 py-2 text-lg font-semibold transition-colors duration-200 ${activeTab === 'cookies' ? 'border-b-4 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-indigo-300'}`}
-                        onClick={() => setActiveTab('cookies')}
-                    >
-                        Roblox Cookies
-                    </button>
+                    {/* Tabs */}
+                    <div className="w-full flex mb-6 border-b border-gray-700">
+                        <button
+                            className={`flex-1 py-2 text-lg font-semibold transition-colors duration-200 ${activeTab === 'games' ? 'border-b-4 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-indigo-300'}`}
+                            onClick={() => setActiveTab('games')}
+                        >
+                            Games
+                        </button>
 
+                        <button
+                            className={`flex-1 py-2 text-lg font-semibold transition-colors duration-200 ${activeTab === 'accounts' ? 'border-b-4 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-indigo-300'}`}
+                            onClick={() => setActiveTab('accounts')}
+                        >
+                            Roblox Accounts
+                        </button>
+
+                    </div>
+
+                    {/* Games Tab */}
+                    <div className="w-full flex-1 overflow-y-auto">
+                        {activeTab === 'games' && (
+                            <div className="flex flex-col h-full">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-bold">Tracked Games</h2>
+                                    <button
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200"
+                                        onClick={addGame}
+                                    >
+                                        + Add Game
+                                    </button>
+                                </div>
+
+                                <ul className="flex-1 overflow-y-auto space-y-2">
+                                    {games.length === 0 ? (
+                                        <li className="text-gray-400">No games tracked yet.</li>
+                                    ) : (
+                                        games.map((game, index) => (
+                                            <li key={index} className="bg-gray-700 rounded px-4 py-2">{game.name}</li>
+                                        ))
+                                    )}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Accounts Tab */}
+                        {activeTab === 'accounts' && (
+                            <div className="flex flex-col h-full">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-bold">Roblox Accounts</h2>
+                                    <button
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200"
+                                        onClick={addAccount}
+                                    >
+                                        + Add Account
+                                    </button>
+                                </div>
+
+                                <ul className="flex-1 overflow-y-auto space-y-2">
+                                    {accounts.length === 0 ? (
+                                        <li className="text-gray-400">No accounts added yet.</li>
+                                    ) : (
+                                        accounts.map((account, index) => (
+                                            <li key={index} className="flex items-center bg-gray-700 rounded px-4 py-2 break-all">
+                                                <p className="inline">
+                                                    {account.value}
+                                                </p>
+                                                <button className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors duration-200 ml-auto">
+                                                    🗑️ Delete
+                                                </button>
+                                            </li>
+                                        ))
+                                    )}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Games Tab */}
-                <div className="w-full flex-1 overflow-y-auto">
-                    {activeTab === 'games' && (
-                        <div className="flex flex-col h-full">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-bold">Tracked Games</h2>
-                                <button
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200"
-                                    onClick={addGame}
-                                >
-                                    + Add Game
-                                </button>
-                            </div>
+                {/* Add Tracker Bot */}
+                <div className="w-[425px] h-[600px] bg-gray-800 rounded-lg shadow-2xl p-10 ml-6 flex flex-col items-center justify-start">
+                    <h1 className="text-2xl font-bold text-white mb-2 text-center">
+                        Add Tracker Account
+                    </h1>
 
-                            <ul className="flex-1 overflow-y-auto space-y-2">
-                                {games.length === 0 ? (
-                                    <li className="text-gray-400">No games tracked yet.</li>
-                                ) : (
-                                    games.map((game, index) => (
-                                        <li key={index} className="bg-gray-700 rounded px-4 py-2">{game.name}</li>
-                                    ))
-                                )}
-                            </ul>
-                        </div>
-                    )}
+                    <img src={placeholder_avatar} alt={"Tracker account avatar"} className={"m-10 scale-150"}/>
 
-                    {/* Cookies Tab */}
-                    {activeTab === 'cookies' && (
-                        <div className="flex flex-col h-full">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-bold">Roblox Cookies</h2>
-                                <button
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200"
-                                    onClick={addCookie}
-                                >
-                                    + Add Cookie
-                                </button>
-                            </div>
+                    <p className="text-center text-md text-gray-300">
+                        You will need to add the tracker account and grant it access to your private servers in order to track them.
+                    </p>
 
-                            <ul className="flex-1 overflow-y-auto space-y-2">
-                                {cookies.length === 0 ? (
-                                    <li className="text-gray-400">No cookies added yet.</li>
-                                ) : (
-                                    cookies.map((cookie, index) => (
-                                        <li key={index} className="bg-gray-700 rounded px-4 py-2 break-all">{cookie.value}</li>
-                                    ))
-                                )}
-                            </ul>
-                        </div>
-                    )}
+                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200 mt-4">
+                        <a href="https://www.roblox.com/users/8874191615/profile" target="_blank">View Profile</a>
+                    </button>
                 </div>
-
-                {activeTab === "cookies" && (
-                    <p className="text-gray-400 text-center">Roblox cookies entered are encrypted and securely stored. Do not share them with untrusted parties.</p>
-                )}
             </div>
         </div>
     );
