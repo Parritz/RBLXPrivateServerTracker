@@ -13,26 +13,37 @@ function Dashboard() {
     const [accounts, setAccounts] = useState([]);
     const [showAddAccountModal, setShowAddAccountModal] = useState(false);
     const [showAddGameModal, setShowAddGameModal] = useState(false);
+    const [showTrackerBotWarning, setShowTrackerBotWarning] = useState(false);
+    const token = localStorage.getItem("token");
+
+    // Retrieves games and Roblox accounts for this user from the server.
+    async function getAccountInfo() {
+        const response = await fetch(`${serverURL}/api/account`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'authentication': token
+            }
+        });
+
+        switch (response.status) {
+            case 200: {
+                const data = await response.json();
+                setAccounts(data.accounts || {});
+                setGames(data.games || {});
+                setShowTrackerBotWarning(data.accountsNotTracked.length !== 0);
+                break;
+            }
+            case 401: {
+                // This shouldn't happen
+                localStorage.removeItem("token");
+                navigate('/')
+                break;
+            }
+        }
+    }
 
     useEffect(() => {
-        const token = localStorage.getItem("token");
-
-        // Retrieves games and Roblox accounts for this user from the server.
-        async function getAccountInfo() {
-            const response = await fetch(`${serverURL}/api/account`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'authentication': token
-                }
-            });
-
-            const data = await response.json();
-            console.log(data)
-            setAccounts(data.accounts || []);
-            setGames(data.games || []);
-        }
-
         // Check if the user is authenticated by verifying the token in cookies.
         async function verifyToken() {
             if (!token) {
@@ -58,7 +69,6 @@ function Dashboard() {
                 }
 
                 const data = await response.json();
-                console.log(data);
                 setUserData(data.user);
             } catch (err) {
                 console.error("Verification failed:", err);
@@ -73,7 +83,6 @@ function Dashboard() {
     // Function to add a game to the tracked games list
     async function addGame(id) {
         if (!id) return;
-        console.log('null')
         const response = await fetch(`${serverURL}/api/game`, {
             method: 'POST',
             headers: {
@@ -83,12 +92,10 @@ function Dashboard() {
             body: JSON.stringify({ id })
         });
 
-        console.log('test')
         if (response.status === 200) {
-            setGames([...games, { name }]);
+            await getAccountInfo() // Update the games list after adding a new game
         }
 
-        console.log("boom")
         setShowAddGameModal(false);
     }
 
@@ -106,8 +113,7 @@ function Dashboard() {
 
         switch (response.status) {
             case 200:
-                setAccounts([...accounts, { value: id }]);
-                console.log(accounts);
+                await getAccountInfo(); // Update the accounts list after adding a new account
                 break;
             default:
                 break;
@@ -117,9 +123,39 @@ function Dashboard() {
         setShowAddAccountModal(false);
     }
 
+    async function deleteAccount(accountName) {
+        const response = await fetch(`${serverURL}/api/account`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'authentication': localStorage.getItem('token')
+            },
+            body: JSON.stringify({ name: accountName })
+        });
+
+        if (response.status === 200) {
+            await getAccountInfo(); // Refresh accounts list
+        }
+    }
+
+    async function deleteGame(gameId) {
+        const response = await fetch(`${serverURL}/api/game`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'authentication': localStorage.getItem('token')
+            },
+            body: JSON.stringify({ id: gameId })
+        });
+
+        if (response.status === 200) {
+            await getAccountInfo(); // Refresh games list
+        }
+    }
+
     return (
         <div className="flex flex-col flex-grow bg-gray-900 text-white items-center justify-center">
-            <Warning message="⚠️ One or more of your accounts have not added the tracker bot. These accounts will not be tracked." />
+            { showTrackerBotWarning && <Warning message="⚠️ One or more of your accounts have not added the tracker bot. These accounts will not be tracked." /> }
             { showAddAccountModal && <InputModal title="Add Account" placeholder="Enter an account username" onSubmit={addAccount} /> }
             { showAddGameModal && <InputModal title="Add Game" placeholder="Enter a game ID" onSubmit={addGame}/> }
 
@@ -161,13 +197,21 @@ function Dashboard() {
                                 </div>
 
                                 <ul className="flex-1 overflow-y-auto space-y-2">
-                                    {games.length === 0 ? (
+                                    {Object.keys(games).length === 0 ? (
                                         <li className="text-gray-400">No games tracked yet.</li>
                                     ) : (
                                         Object.keys(games).map((game, index) => {
                                             const gameData = games[game];
                                             return (
-                                                <li key={index} className="bg-gray-700 rounded px-4 py-2">{gameData.name}</li>
+                                                <li key={index} className="flex items-center bg-gray-700 rounded px-4 py-2 break-all">
+                                                    <span>{gameData.name}</span>
+                                                    <button
+                                                        className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors duration-200 ml-auto"
+                                                        onClick={() => deleteGame(gameData.id)}
+                                                    >
+                                                        🗑️ Delete
+                                                    </button>
+                                                </li>
                                             );
                                         })
                                     )}
@@ -189,18 +233,20 @@ function Dashboard() {
                                 </div>
 
                                 <ul className="flex-1 overflow-y-auto space-y-2">
-                                    {accounts.length === 0 ? (
+                                    {Object.keys(accounts).length === 0 ? (
                                         <li className="text-gray-400">No accounts added yet.</li>
                                     ) : (
                                         Object.keys(accounts).map((account, index) => {
                                             const accountData = accounts[account];
-                                            console.log("boom")
                                             return (
                                                 <li key={index} className="flex items-center bg-gray-700 rounded px-4 py-2 break-all">
                                                     <p className="inline">
                                                         {accountData.name}
                                                     </p>
-                                                    <button className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors duration-200 ml-auto">
+                                                    <button
+                                                        className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors duration-200 ml-auto"
+                                                        onClick={() => deleteAccount(accountData.name)}
+                                                    >
                                                         🗑️ Delete
                                                     </button>
                                                 </li>

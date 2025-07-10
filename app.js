@@ -13,11 +13,13 @@ require("dotenv").config();
 // Initialize the express server, set the port, and define the tracker account
 const app = express();
 const port = process.env.PORT || 3000;
+let robloxTrackerId = 0;
 noblox.setCookie(process.env.ROBLOX_TRACKER_COOKIE).then((accountInfo) => {
    if (!accountInfo.id) {
        console.error("Failed to set Roblox tracker cookie. Please check your .env file.");
        process.exit(1); // Exit the application if the cookie is invalid
    }
+   robloxTrackerId = accountInfo.id;
 
     // Automatically accept friend requests from users who send them
     // Eventually, this should check if the user is in the database, but this is not an issue for now
@@ -30,6 +32,16 @@ noblox.setCookie(process.env.ROBLOX_TRACKER_COOKIE).then((accountInfo) => {
         }
     });
 });
+
+function retrieveRobloxTrackerFriends() {
+    return new Promise((resolve, reject) => {
+        noblox.getFriends(robloxTrackerId).then((friends) => {
+            resolve(friends);
+        }).catch((err) => {
+            console.error("Error retrieving Roblox tracker friends:", err);
+        });
+    })
+}
 
 // Set up middleware
 app.set("view engine", "ejs")
@@ -48,7 +60,6 @@ function redirectFrontend(res, path) {
 
 function isAuthenticated(req, res, next) {
     const token = req.headers.authentication;
-    console.log("token:", token)
     if (!token) {
         redirectFrontend(res, "/")
         return;
@@ -60,6 +71,7 @@ function isAuthenticated(req, res, next) {
             redirectFrontend(res, "/");
             return;
         }
+
         req.user = decoded;
         next();
     });
@@ -94,7 +106,7 @@ app.get("/oauth/login", async (req, res) => {
         // Add the user to the database if they don't exist
         const existingUser = await dbGet("SELECT * FROM users WHERE discord_id = ?", [userData.id]);
         if (!existingUser) {
-            await dbRun("INSERT INTO users (discord_id, accounts, games, refresh_token) VALUES (?, ?, ?, ?)", [userData.id, "[]", "[]", tokens.refresh_token]);
+            await dbRun("INSERT INTO users (discord_id, accounts, games, refresh_token) VALUES (?, ?, ?, ?)", [userData.id, "{}", "{}", tokens.refresh_token]);
             return;
         }
 
@@ -128,10 +140,19 @@ app.get('/api/account', isAuthenticated, async (req, res) => {
    try {
         const discordId = req.user.id;
         const user = await dbGet("SELECT * FROM users WHERE discord_id = ?", [discordId]);
+        if (!user) {
+            return res.status(401).json({ error: "Invalid account" });
+        }
 
+        const parsedAccounts = JSON.parse(user.accounts);
+        const parsedGames = JSON.parse(user.games);
+        const trackerFriends = (await retrieveRobloxTrackerFriends()).data;
         res.status(200).json({
-            accounts: user.accounts ? JSON.parse(user.accounts) : [],
-            games: user.games ? JSON.parse(user.games) : []
+           accounts: parsedAccounts,
+           games: parsedGames,
+           accountsNotTracked: Object.keys(parsedAccounts).filter(accountId => {
+               return !trackerFriends.includes(accountId);
+           })
         });
    } catch (err) {
         console.error("Error retrieving Roblox accounts", err);
@@ -165,18 +186,53 @@ app.post('/api/account', isAuthenticated, async (req, res) => {
         }
 
         // If the user already has this account, return a 409 error
-        const accountIds = JSON.parse(user.accounts);
-        if (accountIds.includes(robloxAccount.id)) {
+        const accounts = JSON.parse(user.accounts);
+        if (accounts[robloxAccount.id]) {
             res.status(409).json({ error: "Account already exists" });
             return;
         }
 
         // Add the account to the user's accounts in the database
-        accountIds.push(robloxAccount.id);
-        await dbRun("UPDATE users SET accounts = ? WHERE discord_id = ?", [JSON.stringify(accountIds), req.user.id]);
+        accounts[robloxAccount.id] = {
+            id: robloxAccount.id,
+            name: robloxAccount.name
+        }
+        await dbRun("UPDATE users SET accounts = ? WHERE discord_id = ?", [JSON.stringify(accounts), req.user.id]);
         res.status(200).json({ message: "Account added successfully" });
     } catch (err) {
         console.log(err)
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.delete('/api/account', isAuthenticated, async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name) {
+            return res.status(400).json({ error: "Account name is required" });
+        }
+
+        // Retrieve the user from the database using their Discord ID
+        const user = await dbGet("SELECT * FROM users WHERE discord_id = ?", [req.user.id]);
+        if (!user) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        // Find the account to delete by name
+        const accounts = JSON.parse(user.accounts);
+        const accountIdToDelete = Object.keys(accounts).find(
+            (id) => accounts[id].name === name
+        );
+        if (!accountIdToDelete) {
+            return res.status(404).json({ error: "Account not found" });
+        }
+
+        // Remove the account
+        delete accounts[accountIdToDelete];
+        await dbRun("UPDATE users SET accounts = ? WHERE discord_id = ?", [JSON.stringify(accounts), req.user.id]);
+        res.status(200).json({ message: "Account deleted successfully" });
+    } catch (err) {
+        console.error("Error deleting account", err);
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -188,8 +244,13 @@ app.post('/api/game', isAuthenticated, async (req, res) => {
             return res.status(400).json({ error: "Game ID is required" });
         }
 
-        // // Search for the user by name
-        // const gameInfo = await game
+        // Search for the game by ID
+        // If the game does not exist, then return a 404 error
+        const gameInfo = (await noblox.getPlaceInfo([id]))[0];
+        if (!gameInfo) {
+            res.status(404).json({ error: "Game does not exist" });
+            return;
+        }
 
         // Retrieve the user from the database using their Discord ID
         const user = await dbGet("SELECT * FROM users WHERE discord_id = ?", [req.user.id]);
@@ -198,31 +259,27 @@ app.post('/api/game', isAuthenticated, async (req, res) => {
             return;
         }
 
-        // If the user already has this account, return a 409 error
-        // const gameIds = JSON.parse(user.games);
-        // if (gameIds.includes(robloxAccount.id)) {
-        //     res.status(409).json({ error: "Game is already tracked" });
-        //     return;
-        // }
+        // If the game is already being tracked, return a 409 error
+        const games = JSON.parse(user.games);
+        if (games[gameInfo.placeId]) {
+            res.status(409).json({ error: "Game is already tracked" });
+            return;
+        }
 
-        // Add the account to the user's accounts in the database
-        // gameIds.push(robloxAccount.id);
-        // await dbRun("UPDATE users SET accounts = ? WHERE discord_id = ?", [JSON.stringify(gameIds), req.user.id]);
-        // res.status(200).json({ message: "Game added successfully" });
+        // Add the game to the user's accounts in the database
+        games[gameInfo.placeId] = {
+            id: gameInfo.placeId,
+            name: gameInfo.name,
+            url: gameInfo.url
+        }
+
+        await dbRun("UPDATE users SET games = ? WHERE discord_id = ?", [JSON.stringify(games), req.user.id]);
+        res.status(200).json({ message: "Game added successfully" });
     } catch (err) {
         console.log(err)
         res.status(500).json({ error: "Internal server error" });
     }
 });
-
-app.post('/api/cookie', isAuthenticated, (req, res) => {
-    const { cookie } = req.body;
-    if (!cookie) {
-        return res.status(400).json({ error: "Game ID is required" });
-    }
-
-    res.status(200).json({ message: "Game added successfully" });
-})
 
 app.listen(port, () => {
     console.log("Server is running on port " + port);
