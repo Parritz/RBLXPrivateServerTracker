@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import Warning from "../components/warning.jsx";
+import InputModal from "../components/InputModal.jsx";
 import placeholder_avatar from '../assets/placeholder_avatar.png';
 
 function Dashboard() {
@@ -10,10 +11,13 @@ function Dashboard() {
     const [activeTab, setActiveTab] = useState('games');
     const [games, setGames] = useState([]);
     const [accounts, setAccounts] = useState([]);
+    const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+    const [showAddGameModal, setShowAddGameModal] = useState(false);
 
-    // Check if the user is authenticated by verifying the token in cookies
     useEffect(() => {
         const token = localStorage.getItem("token");
+
+        // Retrieves games and Roblox accounts for this user from the server.
         async function getAccountInfo() {
             const response = await fetch(`${serverURL}/api/account`, {
                 method: 'GET',
@@ -24,9 +28,12 @@ function Dashboard() {
             });
 
             const data = await response.json();
-            console.log('Account Info:', data);
+            console.log(data)
+            setAccounts(data.accounts || []);
+            setGames(data.games || []);
         }
 
+        // Check if the user is authenticated by verifying the token in cookies.
         async function verifyToken() {
             if (!token) {
                 navigate('/');
@@ -64,11 +71,10 @@ function Dashboard() {
     }, [navigate]);
 
     // Function to add a game to the tracked games list
-    async function addGame() {
-        const id = prompt('Enter game id:');
+    async function addGame(id) {
         if (!id) return;
-
-        await fetch(`${serverURL}/api/game`, {
+        console.log('null')
+        const response = await fetch(`${serverURL}/api/game`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -77,11 +83,16 @@ function Dashboard() {
             body: JSON.stringify({ id })
         });
 
-        if (name) setGames([...games, { name }]);
+        console.log('test')
+        if (response.status === 200) {
+            setGames([...games, { name }]);
+        }
+
+        console.log("boom")
+        setShowAddGameModal(false);
     }
 
-    async function addAccount() {
-        const id = prompt('Enter Roblox account name:');
+    async function addAccount(id) {
         if (!id) return;
 
         const response = await fetch(`${serverURL}/api/account`, {
@@ -93,14 +104,24 @@ function Dashboard() {
             body: JSON.stringify({ name: id })
         });
 
-        if (response.status === 200) {
-            setAccounts([...accounts, { id }]);
+        switch (response.status) {
+            case 200:
+                setAccounts([...accounts, { value: id }]);
+                console.log(accounts);
+                break;
+            default:
+                break;
         }
+        if (response.status === 200) {
+        }
+        setShowAddAccountModal(false);
     }
 
     return (
         <div className="flex flex-col flex-grow bg-gray-900 text-white items-center justify-center">
             <Warning message="⚠️ One or more of your accounts have not added the tracker bot. These accounts will not be tracked." />
+            { showAddAccountModal && <InputModal title="Add Account" placeholder="Enter an account username" onSubmit={addAccount} /> }
+            { showAddGameModal && <InputModal title="Add Game" placeholder="Enter a game ID" onSubmit={addGame}/> }
 
             <div className="flex flex-row">
                 <div className="w-full max-w-3xl h-[600px] bg-gray-800 rounded-lg shadow-2xl p-10 flex flex-col items-center justify-start">
@@ -133,7 +154,7 @@ function Dashboard() {
                                     <h2 className="text-xl font-bold">Tracked Games</h2>
                                     <button
                                         className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200"
-                                        onClick={addGame}
+                                        onClick={() => setShowAddGameModal(true)}
                                     >
                                         + Add Game
                                     </button>
@@ -143,9 +164,12 @@ function Dashboard() {
                                     {games.length === 0 ? (
                                         <li className="text-gray-400">No games tracked yet.</li>
                                     ) : (
-                                        games.map((game, index) => (
-                                            <li key={index} className="bg-gray-700 rounded px-4 py-2">{game.name}</li>
-                                        ))
+                                        Object.keys(games).map((game, index) => {
+                                            const gameData = games[game];
+                                            return (
+                                                <li key={index} className="bg-gray-700 rounded px-4 py-2">{gameData.name}</li>
+                                            );
+                                        })
                                     )}
                                 </ul>
                             </div>
@@ -158,7 +182,7 @@ function Dashboard() {
                                     <h2 className="text-xl font-bold">Roblox Accounts</h2>
                                     <button
                                         className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1 px-3 rounded transition-colors duration-200"
-                                        onClick={addAccount}
+                                        onClick={() => setShowAddAccountModal(true)}
                                     >
                                         + Add Account
                                     </button>
@@ -168,16 +192,20 @@ function Dashboard() {
                                     {accounts.length === 0 ? (
                                         <li className="text-gray-400">No accounts added yet.</li>
                                     ) : (
-                                        accounts.map((account, index) => (
-                                            <li key={index} className="flex items-center bg-gray-700 rounded px-4 py-2 break-all">
-                                                <p className="inline">
-                                                    {account.value}
-                                                </p>
-                                                <button className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors duration-200 ml-auto">
-                                                    🗑️ Delete
-                                                </button>
-                                            </li>
-                                        ))
+                                        Object.keys(accounts).map((account, index) => {
+                                            const accountData = accounts[account];
+                                            console.log("boom")
+                                            return (
+                                                <li key={index} className="flex items-center bg-gray-700 rounded px-4 py-2 break-all">
+                                                    <p className="inline">
+                                                        {accountData.name}
+                                                    </p>
+                                                    <button className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors duration-200 ml-auto">
+                                                        🗑️ Delete
+                                                    </button>
+                                                </li>
+                                            );
+                                        })
                                     )}
                                 </ul>
                             </div>
