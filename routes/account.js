@@ -21,7 +21,7 @@ router.get('/api/account', isAuthenticated, async (req, res) => {
             accounts: parsedAccounts,
             games: parsedGames,
             accountsNotTracked: Object.keys(parsedAccounts).filter(accountId => {
-                return !trackerFriends.includes(accountId);
+                return !trackerFriends.some(friend => String(friend.id) === accountId);
             })
         });
     } catch (err) {
@@ -39,7 +39,6 @@ router.post('/api/account', isAuthenticated, async (req, res) => {
 
         // Search for the user by name
         const robloxAccount = (await noblox.searchUsers(name, 1, null))[0];
-        console.log(robloxAccount)
 
         // If the account does not exist, return a 404 error
         // Otherwise, add the account to the database

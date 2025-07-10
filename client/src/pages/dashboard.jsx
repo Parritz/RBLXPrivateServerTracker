@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import Warning from "../components/warning.jsx";
 import InputModal from "../components/InputModal.jsx";
 import placeholder_avatar from '../assets/placeholder_avatar.png';
@@ -14,7 +15,43 @@ function Dashboard() {
     const [showAddAccountModal, setShowAddAccountModal] = useState(false);
     const [showAddGameModal, setShowAddGameModal] = useState(false);
     const [showTrackerBotWarning, setShowTrackerBotWarning] = useState(false);
+    const [vipServers, setVipServers] = useState({});
+    const [socket, setSocket] = useState(null);
+    const [isConnected, setIsConnected] = useState(false);
     const token = localStorage.getItem("token");
+
+    // Initialize WebSocket connection
+    useEffect(() => {
+        if (token) {
+            const socket = io(serverURL);
+
+            socket.on('connect', () => {
+                console.log('Connected to WebSocket server');
+                setIsConnected(true);
+                socket.emit('authenticate', token);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from WebSocket server');
+                setIsConnected(false);
+            });
+
+            socket.on('vipServers', (data) => {
+                setVipServers(data);
+            });
+
+            socket.on('auth_error', (error) => {
+                console.error('WebSocket authentication error:', error);
+                localStorage.removeItem("token");
+                navigate('/');
+            });
+
+            setSocket(socket);
+            setInterval(() => {
+                socket.emit('requestVIPServers');
+            }, 15000);
+        }
+    }, [token, serverURL, navigate]);
 
     // Retrieves games and Roblox accounts for this user from the server.
     async function getAccountInfo() {
@@ -80,7 +117,7 @@ function Dashboard() {
         getAccountInfo();
     }, [navigate]);
 
-    // Function to add a game to the tracked games list
+    // Adds a game to the user's tracked games list.
     async function addGame(id) {
         if (!id) return;
         const response = await fetch(`${serverURL}/api/game`, {
@@ -99,6 +136,7 @@ function Dashboard() {
         setShowAddGameModal(false);
     }
 
+    // Adds a Roblox account to the user's accounts list.
     async function addAccount(id) {
         if (!id) return;
 
@@ -164,6 +202,11 @@ function Dashboard() {
                     <h1 className="text-3xl font-bold text-white mb-2 text-center">Roblox Private Server Tracker</h1>
                     <p className="text-white mb-6">Welcome, {userData.global_name || 'User'}!</p>
 
+                    {/* Connection Status */}
+                    <div className={`text-sm mb-4 px-3 py-1 rounded ${isConnected ? 'bg-green-600' : 'bg-red-600'}`}>
+                        {isConnected ? '🟢 Live Tracking Active' : '🔴 Disconnected'}
+                    </div>
+
                     {/* Tabs */}
                     <div className="w-full flex mb-6 border-b border-gray-700">
                         <button
@@ -180,6 +223,12 @@ function Dashboard() {
                             Roblox Accounts
                         </button>
 
+                        <button
+                            className={`flex-1 py-2 text-lg font-semibold transition-colors duration-200 ${activeTab === 'vipServers' ? 'border-b-4 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-indigo-300'}`}
+                            onClick={() => setActiveTab('vipServers')}
+                        >
+                            VIP Servers
+                        </button>
                     </div>
 
                     {/* Games Tab */}
@@ -254,6 +303,64 @@ function Dashboard() {
                                         })
                                     )}
                                 </ul>
+                            </div>
+                        )}
+
+                        {/* VIP Servers Tab */}
+                        {activeTab === 'vipServers' && (
+                            <div className="flex flex-col h-full">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-bold">Game Servers</h2>
+                                    <span className="text-sm text-gray-400">
+                                        Updates every 15 seconds
+                                    </span>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto">
+                                    {Object.keys(vipServers).length === 0 ? (
+                                        <div className="text-gray-400 text-center py-8">
+                                            {isConnected ? 'No servers found for your tracked games.' : 'Connecting to server...'}
+                                        </div>
+                                    ) : (
+                                        Object.entries(vipServers).map(([gameId, servers]) => {
+                                            const gameData = vipServers[gameId];
+                                            const gameInfo = games[gameId];
+
+                                            return (
+                                                <div key={gameId} className="mb-6">
+                                                    <h3 className="text-lg font-semibold mb-2 text-indigo-300">
+                                                        {gameInfo ? gameInfo.name : `Game ${gameId}`}
+                                                    </h3>
+
+                                                    <div className="space-y-2">
+                                                        {gameData.map((server) => (
+                                                            <div key={server.id} className="bg-gray-700 rounded p-3">
+                                                                <div className="flex justify-between items-start">
+                                                                    <div className="flex-1">
+                                                                        <div className="font-medium text-white flex items-center gap-2">
+                                                                            {server.name}
+                                                                        </div>
+                                                                        <div className="text-sm text-gray-300">
+                                                                            Owner: {server.owner.name}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className={`text-lg font-bold ${server.isOnline ? 'text-green-400' : 'text-gray-500'}`}>
+                                                                            {server.players.length}/{server.maxPlayers}
+                                                                        </div>
+                                                                        {/*<div className="text-xs text-gray-400">*/}
+                                                                        {/*    {server.isOnline ? '🟢 Online' : '🔴 Offline'}*/}
+                                                                        {/*</div>*/}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
