@@ -194,12 +194,12 @@ function Dashboard() {
     return (
         <div className="flex flex-col flex-grow bg-gray-900 text-white items-center justify-center">
             { showTrackerBotWarning && <Warning message="⚠️ One or more of your accounts have not added the tracker bot. These accounts will not be tracked." /> }
-            { showAddAccountModal && <InputModal title="Add Account" placeholder="Enter an account username" onSubmit={addAccount} /> }
-            { showAddGameModal && <InputModal title="Add Game" placeholder="Enter a game ID" onSubmit={addGame}/> }
+            { showAddAccountModal && <InputModal title="Add Account" placeholder="Enter an account username" onSubmit={addAccount} onClose={() => setShowAddAccountModal(false)} /> }
+            { showAddGameModal && <InputModal title="Add Game" placeholder="Enter a game ID" onSubmit={addGame} onClose={() => setShowAddGameModal(false)} /> }
 
             <div className="flex flex-row">
                 <div className="w-full max-w-3xl h-[600px] bg-gray-800 rounded-lg shadow-2xl p-10 flex flex-col items-center justify-start">
-                    <h1 className="text-3xl font-bold text-white mb-2 text-center">Roblox Private Server Tracker</h1>
+                    <h1 className="text-2xl font-bold text-white mb-2 text-center">Dashboard</h1>
                     <p className="text-white mb-6">Welcome, {userData.global_name || 'User'}!</p>
 
                     {/* Connection Status */}

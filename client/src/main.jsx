@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import App from './pages/app.jsx'
 import Login from "./pages/login.jsx";
 import Dashboard from "./pages/dashboard.jsx";
+import Navbar from './components/navbar.jsx'
 import Footer from './components/footer.jsx'
 import './css/index.css'
 
@@ -12,6 +13,7 @@ createRoot(root).render(
     <StrictMode>
         <div className="flex flex-col min-h-screen bg-gray-900">
             <BrowserRouter>
+                <Navbar />
                 <div className="flex-grow flex flex-col">
                     <Routes>
                         <Route path="/" element={<App />} />
