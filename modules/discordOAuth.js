@@ -6,7 +6,7 @@ async function getTokens(code) {
             client_secret: process.env.DISCORD_CLIENT_SECRET,
             code,
             grant_type: "authorization_code",
-            redirect_uri: `http://localhost:${process.env.PORT}/oauth/login`,
+            redirect_uri: `${process.env.SERVER_URL}/oauth/login` ?? `http://localhost:${process.env.PORT}/oauth/login`,
             scope: "identify",
         }).toString(),
         headers: {

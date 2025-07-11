@@ -5,9 +5,11 @@ const { redirectFrontend } = require("../modules/middleware");
 const jwt = require("jsonwebtoken");
 
 const router = Router();
+const baseURL = process.env.SERVER_URL ?? "http://localhost:3000";
+const redirectURL = encodeURIComponent(`${baseURL}/oauth/login`);
 
 router.get("/oauth", (req, res) => {
-    res.redirect("https://discord.com/oauth2/authorize?client_id=1391882795353112628&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Foauth%2Flogin&scope=identify")
+    res.redirect(`https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&response_type=code&redirect_uri=${redirectURL}&scope=identify`)
 });
 
 router.get("/oauth/login", async (req, res) => {

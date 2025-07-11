@@ -14,7 +14,7 @@ require("dotenv").config();
 // Initialize the tracker bot
 initializeBot()
 
-// Initialize the express server, set the port, and define the tracker account
+// Initialize the express server and set the port
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
